@@ -70,7 +70,7 @@ contract calculation {
 //-
 //-
 contract buyToken is MUTK {
-    mapping(address => uint) public tokenBalance; 
+    mapping(address => uint) private tokenBalance; 
     event Bougth(address receiver, uint amount);
     constructor(){
 
@@ -86,7 +86,7 @@ contract buyToken is MUTK {
 
     //automaticly buy tokens
     receive() external  payable{
-        uint tokensToBuy = msg.value / 2;//1 wei = 1 token
+        uint tokensToBuy = msg.value * 5;//1 wei = 5 tokens
 
         require(tokensToBuy > 0, "not enough funds");
         require(mainTokenBalance() > tokensToBuy, "not enough tokens");
@@ -106,7 +106,7 @@ contract buyToken is MUTK {
 
         _burn(msg.sender, amountToSell);
         tokenBalance[msg.sender] -= amountToSell;
-        payable(msg.sender).transfer(amountToSell * 2);
+        payable(msg.sender).transfer(amountToSell / 5);
     }
 }
 
@@ -130,6 +130,7 @@ contract Staking is buyToken, calculation{
     }
 
     mapping(address => StakerData) public stakingBalance;
+    mapping(address => uint) private stakedFromTS;
 
     function calculateReward(address user) public view returns(uint){
         // StakerData storage staker = stakingBalance[user];
@@ -140,6 +141,11 @@ contract Staking is buyToken, calculation{
         StakerData storage staker = stakingBalance[msg.sender];  
         uint tokenLimit = _allowedAmountOfTokens(3000001/*current amount of stakers*/, 1000000000000000000/*current price of token in wei*/);
 
+        stakedFromTS[msg.sender] = block.timestamp;
+        uint duration = stakedFromTS[msg.sender] + PLAN_DURATION;
+        //uint blockP =  BLOCK_PERIOD + PLAN_DURATION + stakedFromTS[msg.sender];
+
+        require(duration > block.timestamp, "your time is over!!!");
         require(amount > 0, "Amount must be greater than 0");
         require(tokenLimit > 0, "staking is not available");
         require(amount <= tokenLimit, "ur over limit");  
@@ -152,13 +158,26 @@ contract Staking is buyToken, calculation{
 
     }
 
-    function unstake(uint amount) public {
+    function unstake(uint amount) public{
         StakerData storage staker = stakingBalance[msg.sender];
+        uint duration = stakedFromTS[msg.sender] + PLAN_DURATION;
+        uint blockP =  BLOCK_PERIOD + PLAN_DURATION + stakedFromTS[msg.sender];
 
-        require(staker.totalStaked >= amount);
+        require(staker.totalStaked >= amount, "Insufficient staked Balance");
         require(amount > 0, "Amount must be greater than 0");
 
-        _mint(msg.sender, amount);
+        if (duration < block.timestamp && 
+            block.timestamp < blockP){
+                revert("block period");
+        }
+        else if(block.timestamp > blockP){
+            staker.totalStaked -= amount;
+            _mint(msg.sender, amount + (amount / 10));
+        }
+        else if(duration > block.timestamp){
+            staker.totalStaked -= amount;
+            _mint(msg.sender, amount);
+        }
 
     }
 }
